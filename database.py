@@ -5,67 +5,95 @@ DB_FILE = "compounds.db"
 def init_db():
     """
     Initializes the database. Creates the table if it doesn't exist and
-    alters the table to add new columns if they are missing, ensuring
-    backward compatibility.
+    migrates the schema from the old 'name' column to the new 'shortname'
+    and 'longname' columns if needed.
     """
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
 
-    # Create table if it doesn't exist
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS compounds (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE,
-            molecular_weight REAL NOT NULL,
-            standard_concentration REAL,
-            standard_volume REAL
-        )
-    """)
-
-    # --- Schema Migration (idempotent) ---
     c.execute("PRAGMA table_info(compounds)")
     columns = [row[1] for row in c.fetchall()]
-    if 'standard_concentration' not in columns:
-        c.execute("ALTER TABLE compounds ADD COLUMN standard_concentration REAL")
-    if 'standard_volume' not in columns:
-        c.execute("ALTER TABLE compounds ADD COLUMN standard_volume REAL")
+
+    # If 'name' column exists, we need to migrate the schema.
+    if 'name' in columns:
+        # 1. Rename the old table
+        c.execute("ALTER TABLE compounds RENAME TO compounds_old")
+
+        # 2. Create the new table
+        c.execute("""
+            CREATE TABLE compounds (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                shortname TEXT NOT NULL UNIQUE,
+                longname TEXT,
+                molecular_weight REAL NOT NULL,
+                standard_concentration REAL,
+                standard_volume REAL
+            )
+        """)
+
+        # 3. Copy data from the old table to the new one
+        c.execute("""
+            INSERT INTO compounds (id, shortname, longname, molecular_weight, standard_concentration, standard_volume)
+            SELECT id, name, name, molecular_weight, standard_concentration, standard_volume
+            FROM compounds_old
+        """)
+
+        # 4. Drop the old table
+        c.execute("DROP TABLE compounds_old")
+    else:
+        # If no 'name' column, just ensure the new table exists
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS compounds (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                shortname TEXT NOT NULL UNIQUE,
+                longname TEXT,
+                molecular_weight REAL NOT NULL,
+                standard_concentration REAL,
+                standard_volume REAL
+            )
+        """)
+
+    # --- Schema Migration for concentration units (M to mM) ---
+    c.execute("PRAGMA table_info(compounds)")
+    columns = [row[1] for row in c.fetchall()]
+    if 'conc_in_mM_migrated' not in columns:
+        c.execute("UPDATE compounds SET standard_concentration = standard_concentration * 1000 WHERE standard_concentration IS NOT NULL")
+        c.execute("ALTER TABLE compounds ADD COLUMN conc_in_mM_migrated INTEGER DEFAULT 1")
 
     conn.commit()
     conn.close()
 
-def add_compound(name, molecular_weight, standard_concentration=None, standard_volume=None):
+def add_compound(shortname, longname, molecular_weight, standard_concentration=None, standard_volume=None):
     """Adds a single new compound to the database."""
-    try:
-        conn = sqlite3.connect(DB_FILE)
-        c = conn.cursor()
-        c.execute("""
-            INSERT INTO compounds (name, molecular_weight, standard_concentration, standard_volume)
-            VALUES (?, ?, ?, ?)
-        """, (name, molecular_weight, standard_concentration, standard_volume))
-        conn.commit()
-        conn.close()
-        return True
-    except sqlite3.IntegrityError:
-        return False
-
-def upsert_compounds(compounds_data):
-    """
-    Inserts or updates multiple compounds in the database.
-    'compounds_data' should be a list of tuples:
-    [(name, mw, std_conc, std_vol), ...]
-    """
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     try:
-        sql = """
-            INSERT INTO compounds (name, molecular_weight, standard_concentration, standard_volume)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(name) DO UPDATE SET
-                molecular_weight = excluded.molecular_weight,
-                standard_concentration = excluded.standard_concentration,
-                standard_volume = excluded.standard_volume
-        """
-        c.executemany(sql, compounds_data)
+        c.execute("""
+            INSERT INTO compounds (shortname, longname, molecular_weight, standard_concentration, standard_volume)
+            VALUES (?, ?, ?, ?, ?)
+        """, (shortname, longname, molecular_weight, standard_concentration, standard_volume))
+        conn.commit()
+        return c.lastrowid, None
+    except Exception as e:
+        conn.rollback()
+        return None, e
+    finally:
+        conn.close()
+
+def update_compound(compound_id, shortname, longname, molecular_weight, standard_concentration, standard_volume):
+    """Updates an existing compound's data by its ID."""
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    try:
+        c.execute("""
+            UPDATE compounds SET
+                shortname = ?,
+                longname = ?,
+                molecular_weight = ?,
+                standard_concentration = ?,
+                standard_volume = ?
+            WHERE id = ?
+        """, (shortname, longname, molecular_weight, standard_concentration, standard_volume, compound_id))
         conn.commit()
         return c.rowcount, None
     except Exception as e:
@@ -74,21 +102,36 @@ def upsert_compounds(compounds_data):
     finally:
         conn.close()
 
-def get_compound(name):
-    """Retrieves a compound's data by its name."""
+def delete_compound(compound_id):
+    """Deletes a compound from the database by its ID."""
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    try:
+        c.execute("DELETE FROM compounds WHERE id = ?", (compound_id,))
+        conn.commit()
+        return c.rowcount, None
+    except Exception as e:
+        conn.rollback()
+        return 0, e
+    finally:
+        conn.close()
+
+def get_compound_by_shortname(shortname):
+    """Retrieves a compound's data by its shortname."""
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
-    c.execute("SELECT * FROM compounds WHERE name=?", (name,))
+    c.execute("SELECT * FROM compounds WHERE shortname=?", (shortname,))
     result = c.fetchone()
     conn.close()
     return dict(result) if result else None
 
-def get_all_compound_names():
-    """Retrieves all compound names from the database."""
+def get_all_compounds():
+    """Retrieves all compounds from the database, ordered by shortname."""
     conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
     c = conn.cursor()
-    c.execute("SELECT name FROM compounds ORDER BY name")
+    c.execute("SELECT id, shortname, longname, molecular_weight, standard_concentration, standard_volume FROM compounds ORDER BY shortname")
     results = c.fetchall()
     conn.close()
-    return [row[0] for row in results]
+    return [dict(row) for row in results]
