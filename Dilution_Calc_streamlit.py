@@ -35,7 +35,7 @@ st.title("🧪 Dilution Calculator")
 #st.markdown("Quick dilution calculations.")
 
 # --- Step 1: Compound Selection ---
-st.subheader("Select Compound")
+#st.subheader("Select Compound")
 
 all_compounds = db.get_all_compounds()
 molecular_weight = None
@@ -96,7 +96,7 @@ else:
     st.stop()
 
 # --- Step 2: Define Desired Solution ---
-st.subheader("Define Solution")
+#st.subheader("Define Solution")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -140,7 +140,7 @@ with col2:
 col3, col4 = st.columns(2)
 
 with col3:
-    st.subheader("Calculate Mass")
+#    st.subheader("Calculate Mass")
     # Initialize state for calculated and actual mass
     if 'calculated_mass' not in st.session_state:
         st.session_state.calculated_mass = 0.0
@@ -159,15 +159,15 @@ with col3:
         st.session_state.calculated_mass = 0.0
 
 with col4:
-    st.subheader("Adjust for Actual Mass")
+#    st.subheader("Adjust for Actual Mass")
     # Auto-update actual mass from calculated mass only once
     if st.session_state.calculated_mass > 0 and st.session_state.actual_mass_mg == 0.0:
         st.session_state.actual_mass_mg = st.session_state.calculated_mass * 1000
 
     actual_mass_mg = st.number_input(
-        "Actual Weighed Mass (mg)",
+        "Weigh-in (mg)",
         min_value=0.0,
-        format="%.4f",
+        format="%.2f",
         key='actual_mass_mg',
         help="Enter the exact mass you weighed in milligrams. The required volume will update automatically."
     )
