@@ -31,7 +31,7 @@ def calculate_volume(mass_g, molar_concentration_mM, molecular_weight):
     return volume_ml
 
 # --- App Title ---
-st.title("🧪 Dilution Calculator")
+st.markdown('<h2 style="font-size: 22px; font-weight: bold;">🧪 Dilution Calculator</h2>', unsafe_allow_html=True)
 #st.markdown("Quick dilution calculations.")
 
 # --- Step 1: Compound Selection ---
