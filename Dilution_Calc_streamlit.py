@@ -31,8 +31,7 @@ def calculate_volume(mass_g, molar_concentration_mM, molecular_weight):
     return volume_ml
 
 # --- App Title ---
-st.markdown('<h2 style="font-size: 22px; font-weight: bold;">🧪 Dilution Calculator</h2>', unsafe_allow_html=True)
-#st.markdown("Quick dilution calculations.")
+st.markdown('<h2 style="font-size: 26px; font-weight: bold;">🧪 CoCa - Concentration Calculator</h2>', unsafe_allow_html=True)
 
 # --- Step 1: Compound Selection ---
 #st.subheader("Select Compound")
@@ -90,7 +89,7 @@ compound_data = compound_map[selected_shortname]
 molecular_weight = compound_data.get('molecular_weight')
 
 if molecular_weight is not None:
-    st.info(f"MW of **{selected_shortname}**: `{molecular_weight:.4f} g/mol`")
+    st.info(f"MW of {selected_shortname}: **{molecular_weight:.2f} g/mol**")
 else:
     st.error("Could not retrieve data for the selected compound.")
     st.stop()
@@ -108,7 +107,7 @@ with col1:
     except TypeError:
         is_integer = False
         
-    conc_format = "%.0f" if is_integer else "%.6f"
+    conc_format = "%.0f" if is_integer else "%.4f"
     
     desired_concentration = st.number_input(
         "Target Conc. (mM)",
@@ -127,7 +126,7 @@ with col2:
     except TypeError:
         is_vol_integer = False
 
-    vol_format = "%.0f" if is_vol_integer else "%.2f"
+    vol_format = "%.0f" if is_vol_integer else "%.3f"
 
     desired_volume = st.number_input(
         "Target Volume (mL)",
